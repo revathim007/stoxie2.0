@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, ArrowUpRight, TrendingUp, RefreshCw, BarChart3, Percent, DollarSign, IndianRupee, Plus, Check } from 'lucide-react';
+import { Search, ArrowUpRight, TrendingUp, RefreshCw, BarChart3, Percent, DollarSign, IndianRupee, Plus, Check, Download } from 'lucide-react';
 import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 const Stock = () => {
   const [loading, setLoading] = useState(false);
@@ -142,6 +144,80 @@ const Stock = () => {
     return `${symbol}${parseFloat(value).toLocaleString(currency === 'USD' ? 'en-US' : 'en-IN')}`;
   };
 
+  const handleDownloadReport = async () => {
+    const element = document.getElementById('stock-report-content');
+    if (!element) return;
+    
+    try {
+      // 1. Define the PDF generation with onclone to handle unsupported CSS
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        backgroundColor: '#0B0F19',
+        useCORS: true,
+        logging: false,
+        onclone: (clonedDoc) => {
+          const clonedElement = clonedDoc.getElementById('stock-report-content');
+          if (!clonedElement) return;
+
+          // Force a dark background on the cloned container
+          clonedElement.style.backgroundColor = '#0B0F19';
+          clonedElement.style.padding = '20px';
+
+          // Fix for "oklab" / "oklch" error in html2canvas
+          // We recursively find and replace these modern colors with fallbacks in the cloned DOM
+          const allElements = clonedElement.querySelectorAll('*');
+          allElements.forEach(el => {
+            const style = window.getComputedStyle(el);
+            
+            // Helper to check if a value contains modern color functions
+            const isModernColor = (val) => val && (val.includes('oklch') || val.includes('oklab'));
+
+            if (isModernColor(style.color)) {
+              el.style.setProperty('color', 'white', 'important');
+            }
+            if (isModernColor(style.backgroundColor)) {
+              el.style.setProperty('background-color', 'transparent', 'important');
+            }
+            if (isModernColor(style.borderColor)) {
+              el.style.setProperty('border-color', 'rgba(255,255,255,0.1)', 'important');
+            }
+            if (isModernColor(style.fill)) {
+              el.style.setProperty('fill', 'white', 'important');
+            }
+            if (isModernColor(style.stroke)) {
+              el.style.setProperty('stroke', 'white', 'important');
+            }
+          });
+        }
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      let heightLeft = pdfHeight;
+      let position = 0;
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pageHeight;
+      
+      while (heightLeft >= 0) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pageHeight;
+      }
+      
+      pdf.save(`${selectedStock.symbol}_EDA_Report.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF report.');
+    }
+  };
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl mx-auto text-white">
       <header className="mb-8">
@@ -203,7 +279,7 @@ const Stock = () => {
         </form>
 
         {selectedStock ? (
-          <div className="grid grid-cols-1 gap-8 animate-in zoom-in-95 duration-500">
+          <div id="stock-report-content" className="grid grid-cols-1 gap-8 animate-in zoom-in-95 duration-500">
             {/* Top Metrics Row */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               {/* Stock Identity & Price */}
@@ -288,17 +364,26 @@ const Stock = () => {
                   <h3 className="text-2xl font-black text-white">Exploratory Data Analysis</h3>
                   <p className="text-gray-400 font-medium text-sm">Historical data for {selectedStock.symbol}</p>
                 </div>
-                <select
-                  value={period}
-                  onChange={(e) => setPeriod(e.target.value)}
-                  className="glass-input px-4 py-2"
-                >
-                  <option value="7d" className="bg-secondary-dark">7 Days</option>
-                  <option value="1mo" className="bg-secondary-dark">1 Month</option>
-                  <option value="6mo" className="bg-secondary-dark">6 Months</option>
-                  <option value="1y" className="bg-secondary-dark">1 Year</option>
-                  <option value="5y" className="bg-secondary-dark">5 Years</option>
-                </select>
+                <div className="flex items-center space-x-4" data-html2canvas-ignore="true">
+                  <button
+                    onClick={handleDownloadReport}
+                    className="flex items-center space-x-2 px-6 py-2 rounded-xl font-bold text-xs uppercase tracking-widest glass-button hover:glass-button-active transition-all"
+                  >
+                    <Download size={16} />
+                    <span>Download Report</span>
+                  </button>
+                  <select
+                    value={period}
+                    onChange={(e) => setPeriod(e.target.value)}
+                    className="glass-input px-4 py-2"
+                  >
+                    <option value="7d" className="bg-secondary-dark">7 Days</option>
+                    <option value="1mo" className="bg-secondary-dark">1 Month</option>
+                    <option value="6mo" className="bg-secondary-dark">6 Months</option>
+                    <option value="1y" className="bg-secondary-dark">1 Year</option>
+                    <option value="5y" className="bg-secondary-dark">5 Years</option>
+                  </select>
+                </div>
               </div>
               
               <div className="h-[600px] w-full">

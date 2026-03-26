@@ -1,7 +1,13 @@
 
 from rest_framework import generics, filters, status
 from .models import Stock, Portfolio, Collection, Purchase
-from .serializers import StockSerializer, PortfolioSerializer, CollectionSerializer, PurchaseSerializer
+from .serializers import (
+    StockSerializer, 
+    PortfolioSerializer, 
+    CollectionSerializer, 
+    PurchaseSerializer
+)
+from .groq_utils import generate_ai_response
 from datetime import datetime, timedelta
 
 from rest_framework.views import APIView
@@ -88,254 +94,101 @@ class AdminDashboardStatsView(APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
+# --- CHATBOT VIEW WITH GROQ ---
 class ChatbotView(APIView):
     def post(self, request):
-        try:
-            user_id = request.data.get('user_id')
-            user_message = request.data.get('message', '').strip()
-            
-            user_name = "there"
-            is_authenticated = False
-            user_role = 'customer'
-            
-            if user_id:
-                try:
-                    user = User.objects.get(id=user_id)
-                    user_name = user.full_name or user.username
-                    is_authenticated = True
-                    user_role = getattr(user, 'role', 'customer')
-                except (User.DoesNotExist, ValueError, TypeError):
-                    pass
+        user_message = request.data.get('message', '')
+        user_id = request.data.get('user_id')
+        is_authenticated = bool(user_id)
+        
+        user_name = "Guest"
+        user_role = "customer"
+        
+        if is_authenticated:
+            try:
+                from accounts.models import User
+                user = User.objects.get(id=user_id)
+                user_name = user.full_name or user.username
+                user_role = user.role
+            except:
+                pass
 
-            # 1. Use LangChain for NLP Intent Classification
-            parser = JsonOutputParser(pydantic_object=ChatbotIntent)
-            
-            intent_prompt = PromptTemplate(
-                template="""
-                You are Stoxie's brain. Analyze this user message and classify the intent.
-                User Message: "{user_message}"
-                User Role: "{user_role}"
+        user_msg_lower = user_message.lower()
 
-                Available Intents:
-                - greeting: User is saying hi, hello, etc.
-                - price_query: User is asking for a stock price or about a specific stock.
-                - registration_help: User is asking how to sign up, join, or register.
-                - features_query: User is asking about what StockVerse can do, its features, or capabilities.
-                - portfolio_query: User is asking about their portfolios.
-                - collections_query: User is asking about their collections or watchlist.
-                - purchases_query: User is asking about their purchase history or bought stocks.
-                - other: Anything else.
-
-                Rules:
-                1. If it's a price query, extract the stock name or symbol into the 'symbol' field.
-                2. Be precise.
-
-                {format_instructions}
-                """,
-                input_variables=["user_message", "user_role"],
-                partial_variables={"format_instructions": parser.get_format_instructions()},
-            )
-
-            # In a real app with an LLM:
-            # result = (intent_prompt | llm | parser).invoke({"user_message": user_message, "user_role": user_role})
-            
-            # For this task, we will simulate the NLP parsing for high reliability
-            user_msg_lower = user_message.lower()
-            intent_result = {'intent': 'other', 'symbol': '', 'is_greeting': False}
-            
-            # Simple NLP-style heuristics (Simulating LangChain reasoning)
-            if any(greet in user_msg_lower for greet in ['hi', 'hello', 'hey', 'stoxie']):
-                intent_result['intent'] = 'greeting'
-                intent_result['is_greeting'] = True
-            elif any(term in user_msg_lower for term in ['purchases', 'bought', 'did i buy', 'purchase history', 'my orders']):
-                intent_result['intent'] = 'purchases_query'
-            elif any(term in user_msg_lower for term in ['collections', 'my collections', 'watchlist']):
-                intent_result['intent'] = 'collections_query'
-            elif any(term in user_msg_lower for term in ['portfolios', 'my portfolios']):
-                intent_result['intent'] = 'portfolio_query'
-            elif any(term in user_msg_lower for term in ['portfolio', 'collection', 'my stocks', 'holdings', 'my items', 'buy', 'order', 'purchase']):
-                # Secondary fallback for singular/mixed terms
-                if any(t in user_msg_lower for t in ['portfolio']):
-                    intent_result['intent'] = 'portfolio_query'
-                elif any(t in user_msg_lower for t in ['collection', 'stocks', 'watchlist', 'holdings']):
-                    intent_result['intent'] = 'collections_query'
-                elif any(t in user_msg_lower for t in ['buy', 'order', 'purchase', 'bought']):
-                    intent_result['intent'] = 'purchases_query'
-            elif any(term in user_msg_lower for term in ['price', 'stock', 'value', 'worth', 'how much']):
-                intent_result['intent'] = 'price_query'
-                import re
-                # Extract symbol/name
-                symbol_candidate = re.sub(r'what is the|stock|price|of|current|the|is|how much', '', user_msg_lower).strip()
-                intent_result['symbol'] = symbol_candidate
-            elif any(term in user_msg_lower for term in ['register', 'join', 'signup', 'account', 'sign up']):
-                intent_result['intent'] = 'registration_help'
-            elif any(term in user_msg_lower for term in ['feature', 'what can you do', 'about stockverse', 'capabilities', 'help', 'services']):
-                intent_result['intent'] = 'features_query'
-
-            # 2. Execute Action based on Intent
-            if intent_result['intent'] == 'greeting':
-                if is_authenticated:
-                    if user_role == 'admin':
-                        return Response({
-                            'response': f"Hello Admin {user_name}! System status is optimal. How can I assist with your management tasks today?",
-                            'is_admin': True
-                        })
-                    return Response({'response': f"Hello {user_name}! What should we do today?"})
-                else:
-                    return Response({
-                        'response': "Hello! I'm Stoxie. I'm currently in guest mode. You can ask me about stock prices (e.g., 'What is the price of NYKAA?') or I can help you register!",
-                        'show_register': True
-                    })
-
-            elif intent_result['intent'] == 'portfolio_query':
-                if not is_authenticated:
-                    return Response({
-                        'response': "I'd love to help you with your portfolios! However, tracking and managing custom portfolios is a feature reserved for our members. Please register or log in to start building your legacy.",
-                        'show_register': True
-                    })
-                
-                user_portfolios = Portfolio.objects.filter(user_id=user_id)
-                if user_portfolios.exists():
-                    portfolio_names = ", ".join([p.name for p in user_portfolios])
-                    return Response({
-                        'response': f"You have the following portfolios: {portfolio_names}. Would you like to view them in detail?",
-                        'show_portfolio_link': True
-                    })
-                else:
-                    return Response({
-                        'response': "It looks like you haven't created any portfolios yet. Creating a portfolio is a great way to organize your investment ideas!",
-                        'show_create_portfolio': True
-                    })
-
-            elif intent_result['intent'] == 'collections_query':
-                if not is_authenticated:
-                    return Response({
-                        'response': "I'd love to help you with your collections! However, your personal watchlist and collections are only available to registered members. Log in to see your stocks!",
-                        'show_register': True
-                    })
-                
-                user_collections = Collection.objects.filter(user_id=user_id)
-                if user_collections.exists():
-                    stock_names = ", ".join([c.stock.name for c in user_collections])
-                    return Response({
-                        'response': f"Your collections include: {stock_names}. Would you like to manage them?",
-                        'show_collections_link': True
-                    })
-                else:
-                    return Response({
-                        'response': "Your collection is currently empty! You can add stocks to your collection from the Stock search page.",
-                        'show_stocks_link': True
-                    })
-
-            elif intent_result['intent'] == 'purchases_query':
-                if not is_authenticated:
-                    return Response({
-                        'response': "I'd love to show you your purchase history! But first, you need to be logged in to view your orders and portfolio transactions.",
-                        'show_register': True
-                    })
-                
-                user_purchases = Purchase.objects.filter(user_id=user_id)
-                if user_purchases.exists():
-                    total_p = user_purchases.count()
-                    return Response({
-                        'response': f"You have made {total_p} purchases so far. Would you like to view your full purchase history?",
-                        'show_purchases_link': True
-                    })
-                else:
-                    return Response({
-                        'response': "You haven't made any purchases yet! Once you buy a stock from your collection, it will show up here.",
-                        'show_collections_link': True
-                    })
-
-            elif intent_result['intent'] == 'features_query':
-                features_msg = (
-                    "StockVerse is your complete financial universe! Here is what I can do for you:\n\n"
-                    "🚀 **Real-time Insights**: Track live stock prices and market data.\n"
-                    "📈 **AI Forecasting**: Get advanced price predictions using our ARIMA models.\n"
-                    "🧩 **K-Means Clustering**: Visualize stock volatility and price patterns.\n"
-                    "💼 **Portfolio Management**: Create, track, and sync your custom investment portfolios.\n"
-                    "🤖 **AI Investor Persona**: Get personalized advice and investment style analysis.\n"
-                    "📰 **Sentiment Analysis**: Understand market sentiment through AI-driven news processing.\n\n"
-                    "To access these advanced tools, please register or log in!"
-                )
-                if not is_authenticated:
-                    return Response({
-                        'response': features_msg,
-                        'show_register': True
-                    })
-                else:
-                    return Response({'response': features_msg.replace("To access these advanced tools, please register or log in!", "You already have access to all these tools! Check your dashboard to get started.")})
-
-            elif intent_result['intent'] == 'price_query':
-                symbol_query = intent_result['symbol']
-                if not symbol_query:
-                    return Response({'response': "Which stock's price would you like to know? You can ask something like 'What is the price of NYKAA?'"})
-                
-                try:
-                    # Search DB first
-                    stock_obj = Stock.objects.filter(name__icontains=symbol_query).first() or \
-                               Stock.objects.filter(symbol__icontains=symbol_query).first()
-                    symbol = stock_obj.symbol if stock_obj else symbol_query.upper()
-                    
-                    # Fetch from yfinance
-                    ticker = yf.Ticker(symbol)
-                    price = None
-                    
-                    # Try fast_info
-                    try:
-                        fast_info = ticker.fast_info
-                        if 'last_price' in fast_info and not np.isnan(fast_info['last_price']):
-                            price = round(float(fast_info['last_price']), 2)
-                    except:
-                        pass
-                    
-                    # Fallback to history
-                    if price is None:
-                        history = ticker.history(period="1d")
-                        if not history.empty:
-                            price = round(float(history['Close'].iloc[-1]), 2)
-                    
-                    if price is not None:
-                        stock_display_name = stock_obj.name if stock_obj else symbol
-                        symbol_to_use = get_currency_symbol(symbol=symbol)
-                        response_text = f"The current stock price of {stock_display_name} is {symbol_to_use}{price}."
-                        
-                        # Add registration nudge for unauthenticated users
-                        if not is_authenticated:
-                            response_text += "\n\nTo track this stock in your collections and get AI predictions, please register!\n\nSteps:\n1. Click 'Register Now' below.\n2. Create your account.\n3. Login and start tracking!"
-                            return Response({
-                                'response': response_text,
-                                'show_register': True
-                            })
-                        return Response({'response': response_text})
-                    else:
-                        return Response({'response': f"I'm sorry, I couldn't find the real-time price for '{symbol_query}'. Please check the symbol and try again."})
-                except Exception as e:
-                    print(f"Price fetch error: {str(e)}")
-                    return Response({'response': f"I encountered an error while fetching the price for '{symbol_query}'. Please try again later."})
-
-            elif intent_result['intent'] == 'registration_help':
-                if not is_authenticated:
-                    return Response({
-                        'response': "Joining StockVerse is easy!\n\n1. Click the 'Register Now' button below.\n2. Enter your Name and a unique Username.\n3. Set a secure Password.\n4. Complete the form and you're ready to explore the financial universe!",
-                        'show_register': True
-                    })
-                else:
-                    return Response({'response': f"You're already part of the family, {user_name}! You can view your portfolios or explore new stocks in the dashboard."})
-
-            # 3. Default / Other Response
-            if is_authenticated:
-                return Response({'response': "I'm not quite sure how to handle that yet. You can ask me for stock prices (e.g., 'What is the price of TCS?') or just say hi!"})
-            else:
+        # 1. Check for specific system-related intents (Portfolios, Collections, etc.)
+        # This keeps the interactive "Action Tags" working correctly.
+        
+        if any(term in user_msg_lower for term in ['portfolio', 'my portfolios']):
+            if not is_authenticated:
                 return Response({
-                    'response': "I'm still learning! You can ask me for stock prices, or ask 'How to register?' to see how you can join StockVerse.",
+                    'response': "I'd love to help you with your portfolios! However, tracking and managing custom portfolios is a feature reserved for our members. Please register or log in to start building your legacy.",
                     'show_register': True
                 })
+            user_portfolios = Portfolio.objects.filter(user_id=user_id)
+            if user_portfolios.exists():
+                portfolio_names = ", ".join([p.name for p in user_portfolios])
+                return Response({
+                    'response': f"Hi {user_name}! You have the following portfolios: {portfolio_names}. Would you like to view them in detail?",
+                    'show_portfolio_link': True
+                })
+            else:
+                return Response({
+                    'response': f"It looks like you haven't created any portfolios yet, {user_name}. Creating a portfolio is a great way to organize your investment ideas!",
+                    'show_create_portfolio': True
+                })
 
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return Response({'response': "Something went wrong in my processing system. Please try again later."}, status=500)
+        if any(term in user_msg_lower for term in ['collection', 'my collections', 'watchlist']):
+            if not is_authenticated:
+                return Response({
+                    'response': "I'd love to help you with your collections! However, your personal watchlist and collections are only available to registered members. Log in to see your stocks!",
+                    'show_register': True
+                })
+            user_collections = Collection.objects.filter(user_id=user_id)
+            if user_collections.exists():
+                stock_names = ", ".join([c.stock.name for c in user_collections])
+                return Response({
+                    'response': f"Your collections include: {stock_names}. Would you like to manage them?",
+                    'show_collections_link': True
+                })
+            else:
+                return Response({
+                    'response': "Your collection is currently empty! You can add stocks to your collection from the Stock search page.",
+                    'show_stocks_link': True
+                })
+
+        if any(term in user_msg_lower for term in ['purchases', 'bought', 'did i buy', 'purchase history', 'my orders']):
+            if not is_authenticated:
+                return Response({
+                    'response': "I'd love to show you your purchase history! But first, you need to be logged in to view your orders and portfolio transactions.",
+                    'show_register': True
+                })
+            user_purchases = Purchase.objects.filter(user_id=user_id)
+            if user_purchases.exists():
+                return Response({
+                    'response': f"You have made {user_purchases.count()} purchases so far. Would you like to view your full purchase history?",
+                    'show_purchases_link': True
+                })
+            else:
+                return Response({
+                    'response': "You haven't made any purchases yet! Once you buy a stock from your collection, it will show up here.",
+                    'show_collections_link': True
+                })
+
+        # 2. For everything else, use the Powerful Groq AI!
+        ai_response = generate_ai_response(user_message, is_authenticated, user_name, user_role)
+        
+        # Check for some common AI suggested actions
+        action_payload = {'response': ai_response}
+        
+        # Simple keyword checks to add buttons if AI mentions them
+        if "register" in ai_response.lower() and not is_authenticated:
+            action_payload['show_register'] = True
+        if "recommend" in ai_response.lower() and is_authenticated:
+            action_payload['action'] = 'view_recommendations'
+        if "search" in ai_response.lower() or "look up" in ai_response.lower():
+            action_payload['action'] = 'search_stocks'
+            
+        return Response(action_payload)
 
 class StockListView(generics.ListAPIView):
     queryset = Stock.objects.all()
