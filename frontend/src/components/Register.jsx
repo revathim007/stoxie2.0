@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 
 const Register = () => {
   const [role, setRole] = useState('customer'); // 'customer' or 'admin'
@@ -12,6 +13,8 @@ const Register = () => {
     mpin: '',
     phoneNumber: '',
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showMpin, setShowMpin] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -140,14 +143,23 @@ const Register = () => {
 
           <div>
             <label className="block text-gray-200 text-sm font-bold mb-1">Password</label>
-            <input
-              type="password"
-              name="password"
-              className="glass-input w-full px-4 py-2"
-              placeholder="Enter Password"
-              required
-              onChange={handleChange}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                className="glass-input w-full px-4 py-2 pr-12"
+                placeholder="Enter Password"
+                required
+                onChange={handleChange}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           {role === 'customer' && (
@@ -168,15 +180,24 @@ const Register = () => {
           {role === 'customer' && (
             <div>
               <label className="block text-gray-200 text-sm font-bold mb-1">MPIN</label>
-              <input
-                type="text"
-                name="mpin"
-                maxLength="6"
-                className="glass-input w-full px-4 py-2"
-                placeholder="Enter 6-digit MPIN"
-                required
-                onChange={handleChange}
-              />
+              <div className="relative">
+                <input
+                  type={showMpin ? "text" : "password"}
+                  name="mpin"
+                  maxLength="6"
+                  className="glass-input w-full px-4 py-2 pr-12"
+                  placeholder="Enter 6-digit MPIN"
+                  required
+                  onChange={handleChange}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowMpin(!showMpin)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                >
+                  {showMpin ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
           )}
 

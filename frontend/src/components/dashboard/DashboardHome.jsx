@@ -4,10 +4,87 @@ import { useLocation } from 'react-router-dom';
 import { Briefcase, Search, Plus, X, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, IndianRupee } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 
-const DashboardHome = () => {
-  const location = useLocation();
+const CreatePortfolioForm = ({ existingPortfolios, onPortfolioCreated, shouldHighlight }) => {
   const [portfolioName, setPortfolioName] = useState('');
   const [portfolioDescription, setPortfolioDescription] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!portfolioName.trim()) {
+      alert('Please enter a portfolio name.');
+      return;
+    }
+
+    const nameExists = existingPortfolios.some(
+      (p) => p.name.toLowerCase() === portfolioName.trim().toLowerCase()
+    );
+
+    if (nameExists) {
+      alert('same portfolio already exists');
+      return;
+    }
+
+    try {
+      const userData = JSON.parse(localStorage.getItem('user'));
+      const payload = {
+        name: portfolioName,
+        description: portfolioDescription,
+        user_id: userData.id
+      };
+      
+      await axios.post('http://localhost:8000/api/stocks/portfolios/', payload);
+      alert(`Portfolio "${portfolioName}" created successfully!`);
+      
+      setPortfolioName('');
+      setPortfolioDescription('');
+      onPortfolioCreated();
+    } catch (error) {
+      console.error('Error creating portfolio:', error);
+      alert('Failed to create portfolio. Please try again.');
+    }
+  };
+
+  return (
+    <div className={`glass-panel p-6 transition-all duration-500 ${shouldHighlight ? 'form-highlight' : ''}`}>
+      <h3 className="text-xl font-bold text-white mb-6 flex items-center">
+        <Briefcase className="text-light-accent mr-2" size={24} />
+        Create Portfolio
+      </h3>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div>
+          <label className="block text-sm font-bold text-gray-300 mb-2">Portfolio Name</label>
+          <input 
+            type="text" 
+            value={portfolioName}
+            onChange={(e) => setPortfolioName(e.target.value)}
+            placeholder="e.g. Retirement Fund" 
+            className="glass-input w-full px-4 py-3"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-bold text-gray-300 mb-2">Portfolio Description</label>
+          <textarea 
+            value={portfolioDescription}
+            onChange={(e) => setPortfolioDescription(e.target.value)}
+            placeholder="e.g. Long-term growth stocks and high-dividend yields." 
+            className="glass-input w-full px-4 py-3 min-h-[120px] resize-none"
+          />
+        </div>
+
+        <button 
+          type="submit"
+          className="w-full glass-button py-4 font-extrabold uppercase tracking-wider hover:glass-button-active active:scale-95 mt-4"
+        >
+          Create Portfolio
+        </button>
+      </form>
+    </div>
+  );
+};
+
+const DashboardHome = () => {
+  const location = useLocation();
   const [shouldHighlight, setShouldHighlight] = useState(false);
   const [stats, setStats] = useState({ 
     totalNetWorth: 0, 
@@ -138,44 +215,6 @@ const DashboardHome = () => {
     }
   }, [location.state]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!portfolioName.trim()) {
-      alert('Please enter a portfolio name.');
-      return;
-    }
-
-    // Check if portfolio with same name already exists
-    const nameExists = existingPortfolios.some(
-      (p) => p.name.toLowerCase() === portfolioName.trim().toLowerCase()
-    );
-
-    if (nameExists) {
-      alert('same portfolio already exists');
-      return;
-    }
-
-    try {
-      const userData = JSON.parse(localStorage.getItem('user'));
-      const payload = {
-        name: portfolioName,
-        description: portfolioDescription,
-        user_id: userData.id
-      };
-      
-      await axios.post('http://localhost:8000/api/stocks/portfolios/', payload);
-      alert(`Portfolio "${portfolioName}" created successfully!`);
-      
-      // Reset form
-      setPortfolioName('');
-      setPortfolioDescription('');
-      fetchStats(); // Update dashboard stats immediately
-    } catch (error) {
-      console.error('Error creating portfolio:', error);
-      alert('Failed to create portfolio. Please try again.');
-    }
-  };
-
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 text-white">
       <style>{animationStyle}</style>
@@ -204,41 +243,11 @@ const DashboardHome = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1">
-          <div className={`glass-panel p-6 transition-all duration-500 ${shouldHighlight ? 'form-highlight' : ''}`}>
-            <h3 className="text-xl font-bold text-white mb-6 flex items-center">
-              <Briefcase className="text-light-accent mr-2" size={24} />
-              Create Portfolio
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-sm font-bold text-gray-300 mb-2">Portfolio Name</label>
-                <input 
-                  type="text" 
-                  value={portfolioName}
-                  onChange={(e) => setPortfolioName(e.target.value)}
-                  placeholder="e.g. Retirement Fund" 
-                  className="glass-input w-full px-4 py-3"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-300 mb-2">Portfolio Description</label>
-                <textarea 
-                  value={portfolioDescription}
-                  onChange={(e) => setPortfolioDescription(e.target.value)}
-                  placeholder="e.g. Long-term growth stocks and high-dividend yields." 
-                  className="glass-input w-full px-4 py-3 min-h-[120px] resize-none"
-                />
-              </div>
-
-              <button 
-                type="submit"
-                className="w-full glass-button py-4 font-extrabold uppercase tracking-wider hover:glass-button-active active:scale-95 mt-4"
-              >
-                Create Portfolio
-              </button>
-            </form>
-          </div>
+          <CreatePortfolioForm 
+            existingPortfolios={existingPortfolios} 
+            onPortfolioCreated={fetchStats}
+            shouldHighlight={shouldHighlight}
+          />
         </div>
 
         <div className="lg:col-span-2">

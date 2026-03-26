@@ -13,18 +13,13 @@ const Portfolio = () => {
   const [selectedStocks, setSelectedStocks] = useState([]);
   const [addingToCollection, setAddingToCollection] = useState({});
   const [portfolioSearch, setPortfolioSearch] = useState('');
-  const [allStocks, setAllStocks] = useState([]);
 
   const fetchPortfolios = async () => {
     setLoading(true);
     try {
       const userData = JSON.parse(localStorage.getItem('user'));
-      const [portfoliosRes, stocksRes] = await Promise.all([
-        axios.get(`http://localhost:8000/api/stocks/portfolios/?user_id=${userData.id}`),
-        axios.get(`http://localhost:8000/api/stocks/`)
-      ]);
+      const portfoliosRes = await axios.get(`http://localhost:8000/api/stocks/portfolios/?user_id=${userData.id}`);
       setPortfolios(portfoliosRes.data);
-      setAllStocks(stocksRes.data);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -192,27 +187,6 @@ const Portfolio = () => {
     }, {});
   };
 
-  const getBuiltInPortfolios = () => {
-    const sectors = {};
-    allStocks.forEach(stock => {
-      const sector = stock.sector || 'Others';
-      if (!sectors[sector]) {
-        sectors[sector] = [];
-      }
-      sectors[sector].push({ stock, quantity: 1 });
-    });
-
-    return Object.entries(sectors).map(([sector, items], index) => ({
-      id: `builtin-${index}`,
-      portfolio_id: `BI-${index}`,
-      name: `${sector} Portfolio`,
-      description: `Automatically generated portfolio for the ${sector} sector.`,
-      items,
-      isBuiltIn: true,
-      created_at: new Date().toISOString()
-    }));
-  };
-
   const getPortfolioColor = (index) => {
     const colors = [
       { border: 'border-light-accent/20', glow: 'bg-light-accent/10', text: 'text-light-accent' },
@@ -225,10 +199,6 @@ const Portfolio = () => {
 
   const filteredPortfolios = portfolios.filter(portfolio =>
     portfolio.name.toLowerCase().includes(portfolioSearch.toLowerCase())
-  );
-
-  const builtInPortfolios = getBuiltInPortfolios().filter(p => 
-    p.name.toLowerCase().includes(portfolioSearch.toLowerCase())
   );
 
   if (loading) {
@@ -245,7 +215,7 @@ const Portfolio = () => {
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl mx-auto text-white">
       <header className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tight">Your Portfolios</h1>
+          <h1 className="text-4xl font-extrabold tracking-tight">My Portfolios</h1>
           <p className="text-gray-400 mt-2 font-medium">Manage and track your custom stock collections.</p>
         </div>
         <div className="relative">
@@ -383,73 +353,6 @@ const Portfolio = () => {
           <p className="text-gray-500 max-w-xs mt-2 font-bold uppercase text-[10px] tracking-widest leading-relaxed">
             Create custom stock groups to track your favorite market trends.
           </p>
-        </div>
-      )}
-
-      {/* Built-in Portfolios Section */}
-      {builtInPortfolios.length > 0 && (
-        <div className="pt-12 border-t border-white/5">
-          <div className="flex items-center space-x-3 mb-8">
-            <div className="bg-gray-500/10 p-2.5 rounded-2xl border border-white/10">
-              <Layers className="text-gray-400" size={24} />
-            </div>
-            <div>
-              <h2 className="text-2xl font-black tracking-tight text-white/80">Sector Portfolios</h2>
-              <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest mt-1">Industry-Focused Picks collections</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 opacity-80 hover:opacity-100 transition-opacity duration-500">
-            {builtInPortfolios.map((portfolio, index) => {
-              return (
-                <div key={portfolio.id} className="bg-secondary-dark/40 rounded-[32px] overflow-hidden group hover:bg-secondary-dark/60 transition-all duration-500 flex flex-col border border-white/5 border-dashed">
-                  <div className="p-8 flex-1">
-                    <div className="flex justify-between items-start mb-6">
-                      <span className="px-3 py-1 bg-white/5 text-gray-500 text-[9px] font-black rounded-lg uppercase tracking-[0.2em] border border-white/10">
-                        SYSTEM
-                      </span>
-                    </div>
-                    
-                    <h3 className="text-xl font-black text-white/70 mb-2 group-hover:text-white transition-colors leading-tight">
-                      {portfolio.name}
-                    </h3>
-                    
-                    <p className="text-gray-500 text-xs font-medium mb-6 line-clamp-2 italic">
-                      {portfolio.description}
-                    </p>
-
-                    <div className="space-y-4 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                      <div className="flex flex-wrap gap-2">
-                        {portfolio.items.map((item) => (
-                          <div key={item.stock.id} className="bg-white/5 px-2.5 py-1 rounded-lg border border-white/5 group-hover:border-white/10 transition-colors">
-                            <span className="text-[10px] font-black text-gray-500 uppercase group-hover:text-gray-300">
-                              {item.stock.symbol.split('.')[0]}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="px-8 pb-8">
-                    <button 
-                      onClick={() => handleBulkAddToCollection(portfolio)}
-                      disabled={addingToCollection[portfolio.id]}
-                      className="w-full bg-white/5 hover:bg-light-accent hover:text-secondary-dark p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center border border-white/5 hover:border-light-accent"
-                    >
-                      {addingToCollection[portfolio.id] ? (
-                        <span className="flex items-center">
-                          <Layers size={14} className="animate-spin mr-2" />
-                          IMPORTING...
-                        </span>
-                      ) : (
-                        'Clone to My Assets'
-                      )}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
       )}
 

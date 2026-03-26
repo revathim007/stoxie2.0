@@ -17,6 +17,7 @@ import Settings from './components/dashboard/Settings';
 import MyCollections from './components/dashboard/MyCollections';
 import MyPurchases from './components/dashboard/MyPurchases';
 import OrderHistory from './components/dashboard/OrderHistory';
+import MyPortfolioMsg from './components/dashboard/MyPortfolioMsg';
 import ErrorBoundary from './components/ErrorBoundary';
 import Chatbot from './components/Chatbot';
 
@@ -42,6 +43,7 @@ function App() {
             <Route path="collections" element={<MyCollections />} />
             <Route path="purchases" element={<MyPurchases />} />
             <Route path="orders" element={<OrderHistory />} />
+            <Route path="my-portfolio-msg" element={<MyPortfolioMsg />} />
           </Route>
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

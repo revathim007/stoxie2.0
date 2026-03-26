@@ -20,6 +20,7 @@ import numpy as np
 from sklearn.cluster import KMeans
 import tempfile
 import os
+import random
 
 # NLP & LangChain Imports
 try:
@@ -708,11 +709,55 @@ class UserRecommendationAnalysisView(APIView):
             total_invested = sum([p.total_amount for p in purchases])
             is_profit = total_invested > 0 # Simple check for profile sentiment
             
+            # 3. GET TOP 10 RECOMMENDED STOCKS
+            user_stock_ids = list(collections.values_list('stock_id', flat=True)) + \
+                            list(purchases.values_list('stock_id', flat=True))
+            
+            # Get potential candidates (not already owned)
+            candidates = Stock.objects.exclude(id__in=user_stock_ids)
+            
+            # Filter by sector if possible, else just get any
+            sector_candidates = candidates.filter(sector__in=[top_sector] + suggested_diversification.split(' or '))
+            if sector_candidates.count() < 10:
+                recommended_list = list(sector_candidates) + list(candidates.exclude(id__in=sector_candidates.values_list('id', flat=True))[:10-sector_candidates.count()])
+            else:
+                recommended_list = list(sector_candidates[:10])
+
+            # Prepare recommendation data with simulated predictions for multiple timeframes
+            import random
+            recommended_stocks_data = []
+            for s in recommended_list:
+                curr_price = float(s.current_price or 0)
+                
+                # Helper to simulate growth based on timeframe
+                def get_sim(min_pct, max_pct):
+                    change_pct = random.uniform(min_pct, max_pct)
+                    pred_price = curr_price * (1 + change_pct)
+                    return {
+                        'price': round(pred_price, 2),
+                        'change': round(change_pct * 100, 2)
+                    }
+
+                recommended_stocks_data.append({
+                    'symbol': s.symbol,
+                    'name': s.name,
+                    'current_price': curr_price,
+                    'pe_ratio': float(s.pe_ratio or 0),
+                    'discount_ratio': float(s.discount_ratio or 0),
+                    'predictions': {
+                        '1mo': get_sim(-0.05, 0.15),
+                        '3mo': get_sim(-0.08, 0.25),
+                        '6mo': get_sim(-0.12, 0.40),
+                        '1yr': get_sim(-0.20, 0.70)
+                    }
+                })
+
             return Response({
                 'investor_type': investor_type,
                 'personality_statement': personality,
                 'actionable_advice': advice,
-                'sentiment_score': 75 if is_profit else 45
+                'sentiment_score': 75 if is_profit else 45,
+                'recommended_stocks': recommended_stocks_data
             })
 
         except Exception as e:

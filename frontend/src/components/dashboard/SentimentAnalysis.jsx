@@ -1,10 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { BarChart3, Briefcase, Search, TrendingUp, TrendingDown, Info } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import axios from 'axios';
 
 const SentimentAnalysis = () => {
+  const location = useLocation();
   const [symbol, setSymbol] = useState('');
   const [sentimentData, setSentimentData] = useState(null);
   const [error, setError] = useState(null);
@@ -44,6 +46,18 @@ const SentimentAnalysis = () => {
     fetchStocks();
     fetchPortfolios();
   }, []);
+
+  useEffect(() => {
+    if (location.state && location.state.symbol && stocks.length > 0) {
+      const stock = stocks.find(s => s.symbol === location.state.symbol);
+      if (stock) {
+        handleSuggestionClick(stock);
+      }
+    } else if (location.state && location.state.portfolio) {
+      setSelectedPortfolio(location.state.portfolio);
+      handlePortfolioSearch(location.state.portfolio);
+    }
+  }, [location.state, stocks]);
 
   const handleInputChange = (e) => {
     const value = e.target.value;

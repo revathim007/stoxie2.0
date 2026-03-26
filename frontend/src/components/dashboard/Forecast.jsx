@@ -185,6 +185,9 @@ const Forecast = () => {
       if (stock) {
         handleSuggestionClick(stock);
       }
+    } else if (location.state && location.state.portfolio) {
+      setSelectedPortfolio(location.state.portfolio);
+      handlePortfolioSearch(location.state.portfolio, predictionDays);
     }
   }, [location.state, stocks]);
 

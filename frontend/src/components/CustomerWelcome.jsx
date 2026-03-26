@@ -33,7 +33,7 @@ const CustomerWelcome = () => {
   const navItems = [
     { name: 'Dashboard', path: '/customer-welcome', icon: <LayoutDashboard size={20} /> },
     { name: 'Stock', path: '/customer-welcome/stock', icon: <TrendingUp size={20} /> },
-    { name: 'Portfolio', path: '/customer-welcome/portfolio', icon: <Briefcase size={20} /> },
+    { name: 'Portfolios', path: '/customer-welcome/my-portfolio-msg', icon: <Briefcase size={20} /> },
     { name: 'Forecast', path: '/customer-welcome/forecast', icon: <LineChart size={20} /> },
     { name: 'Sentiment Analysis', path: '/customer-welcome/sentiment', icon: <BarChart3 size={20} /> },
   ];
@@ -77,6 +77,17 @@ const CustomerWelcome = () => {
               <span>{item.name}</span>
             </button>
           ))}
+          <button
+            onClick={() => navigate('/customer-welcome/portfolio')}
+            className={`flex items-center space-x-2 px-6 py-2.5 rounded-full transition-all duration-300 font-black text-sm ml-2 ${
+              activePath === '/customer-welcome/portfolio'
+                ? 'bg-emerald-400 text-primary-dark shadow-[0_0_20px_rgba(52,211,153,0.4)] scale-105'
+                : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:scale-105 border border-emerald-500/20'
+            }`}
+          >
+            <Briefcase size={20} />
+            <span>My Portfolios</span>
+          </button>
           <button
             onClick={() => navigate('/customer-welcome/recommend')}
             className={`flex items-center space-x-2 px-6 py-2.5 rounded-full transition-all duration-300 font-black text-sm ml-2 ${
