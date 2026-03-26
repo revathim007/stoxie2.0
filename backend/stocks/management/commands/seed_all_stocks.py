@@ -6,26 +6,53 @@ from stocks.models import Stock
 from django.conf import settings
 import yfinance as yf
 from decimal import Decimal
+import time
 
 class Command(BaseCommand):
-    help = 'Seeds the database with both India and US stocks from the root data files'
+    help = 'Seeds the database with both India and US stocks and fetches real-time data from yfinance'
+
+    def update_stock_data(self, stock):
+        """Helper to fetch and update stock data from yfinance"""
+        try:
+            ticker = yf.Ticker(stock.symbol)
+            info = ticker.info
+            
+            # Current Price
+            price = info.get('currentPrice') or info.get('regularMarketPrice')
+            if price:
+                stock.current_price = Decimal(str(price))
+            
+            # PE Ratio
+            pe = info.get('trailingPE') or info.get('forwardPE')
+            if pe:
+                stock.pe_ratio = Decimal(str(pe))
+            
+            # Discount Ratio (using target price)
+            target = info.get('targetMeanPrice')
+            if target and price:
+                discount = ((float(target) - float(price)) / float(target)) * 100
+                stock.discount_ratio = Decimal(str(round(discount, 2)))
+            
+            stock.save()
+            return True
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f"Error fetching data for {stock.symbol}: {str(e)}"))
+            return False
 
     def handle(self, *args, **options):
-        # 1. Paths to files in project root
-        # BASE_DIR: d:\Revathi\Biz Metric Internship\Project 2026\Stoxie\Group-03\backend
-        # Files: d:\Revathi\Biz Metric Internship\Project 2026\Stoxie\Group-03\ind_nifty200list.csv
         root_dir = settings.BASE_DIR.parent
         india_file = os.path.join(root_dir, 'ind_nifty200list.csv')
         us_file = os.path.join(root_dir, 'USA Top 200 Stocks.xlsx')
 
-        self.stdout.write(self.style.WARNING(f"Looking for data files in: {root_dir}"))
+        self.stdout.write(self.style.WARNING(f"Starting seed process. Files: {india_file}, {us_file}"))
 
-        # 2. Process India Stocks (NSE)
+        all_stocks_to_update = []
+
+        # 1. Process India Stocks (NSE)
         if os.path.exists(india_file):
-            self.stdout.write(self.style.SUCCESS(f"Importing India stocks from: {india_file}"))
+            self.stdout.write(self.style.SUCCESS(f"Importing India stocks..."))
             try:
                 df = pd.read_csv(india_file)
-                count = 0
                 for _, row in df.iterrows():
                     symbol = f"{row['Symbol']}.NS"
                     stock, created = Stock.objects.get_or_create(
@@ -37,39 +64,43 @@ class Command(BaseCommand):
                             'currency': 'INR'
                         }
                     )
-                    if created: count += 1
-                self.stdout.write(self.style.SUCCESS(f"Finished India stocks. Created {count} new entries."))
+                    all_stocks_to_update.append(stock)
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"Error importing India stocks: {str(e)}"))
-        else:
-            self.stdout.write(self.style.ERROR(f"India file not found: {india_file}"))
 
-        # 3. Process US Stocks (NYSE/NASDAQ)
+        # 2. Process US Stocks (NYSE/NASDAQ)
         if os.path.exists(us_file):
-            self.stdout.write(self.style.SUCCESS(f"Importing US stocks from: {us_file}"))
+            self.stdout.write(self.style.SUCCESS(f"Importing US stocks..."))
             try:
-                # The US file is Excel
                 df = pd.read_excel(us_file)
-                count = 0
                 for _, row in df.iterrows():
                     symbol = row['Symbol']
                     stock, created = Stock.objects.get_or_create(
                         symbol=symbol,
                         defaults={
                             'name': row['Company'],
-                            'exchange': 'NYSE', # Defaulting to NYSE, yfinance handles both
+                            'exchange': 'NYSE',
                             'sector': row.get('Sector', 'N/A'),
                             'currency': 'USD'
                         }
                     )
-                    if created: count += 1
-                self.stdout.write(self.style.SUCCESS(f"Finished US stocks. Created {count} new entries."))
+                    all_stocks_to_update.append(stock)
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"Error importing US stocks: {str(e)}"))
-        else:
-            self.stdout.write(self.style.ERROR(f"US file not found: {us_file}"))
 
-        # 4. Optional: Initial Price Update for a few key stocks (to show it works)
-        # We don't want to update all 400 at once during seed as it takes time, 
-        # the app fetches them on-demand or we can have a separate refresh command.
-        self.stdout.write(self.style.WARNING("Stock metadata seeded. Prices will be updated on-demand in the app."))
+        # 3. Update Real-time Data
+        total = len(all_stocks_to_update)
+        self.stdout.write(self.style.WARNING(f"Updating real-time data for {total} stocks (this may take a while)..."))
+        
+        updated_count = 0
+        for i, stock in enumerate(all_stocks_to_update):
+            if self.update_stock_data(stock):
+                updated_count += 1
+            
+            if (i + 1) % 10 == 0:
+                self.stdout.write(f"Processed {i+1}/{total} stocks...")
+            
+            # Small delay to avoid yfinance rate limits
+            time.sleep(0.05)
+
+        self.stdout.write(self.style.SUCCESS(f"Successfully seeded {total} stocks. Real-time data updated for {updated_count} stocks."))
