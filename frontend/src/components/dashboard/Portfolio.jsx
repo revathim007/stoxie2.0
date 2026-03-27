@@ -1,9 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Briefcase, Layers, TrendingUp, Calendar, Trash2, Plus, Search, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Briefcase, Layers, TrendingUp, Calendar, Trash2, Plus, Search, X, ArrowRight } from 'lucide-react';
 
 const Portfolio = () => {
+  const navigate = useNavigate();
   const [portfolios, setPortfolios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -248,7 +250,11 @@ const Portfolio = () => {
           {filteredPortfolios.map((portfolio, index) => {
             const cardColor = getPortfolioColor(index);
             return (
-              <div key={portfolio.id} className="glass-panel overflow-hidden group hover:shadow-[0_20px_50px_rgba(0,0,0,0.3)] transition-all duration-500 flex flex-col border border-white/10 relative">
+              <div 
+                key={portfolio.id} 
+                onClick={() => navigate(`/customer-welcome/portfolio-detail/${encodeURIComponent(portfolio.name)}?type=user&id=${portfolio.id}`)}
+                className="glass-panel overflow-hidden group hover:shadow-[0_20px_50px_rgba(0,0,0,0.3)] transition-all duration-500 flex flex-col border border-white/10 relative cursor-pointer"
+              >
                 {/* Accent Glow */}
                 <div className={`absolute -top-24 -right-24 w-48 h-48 rounded-full blur-[80px] opacity-20 group-hover:opacity-40 transition-opacity duration-700 ${cardColor.glow}`}></div>
                 
@@ -258,15 +264,19 @@ const Portfolio = () => {
                       ID: {portfolio.portfolio_id}
                     </span>
                     <div 
-                      onClick={() => handleDeletePortfolio(portfolio.id, portfolio.name)}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400/60 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer border border-red-500/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeletePortfolio(portfolio.id, portfolio.name);
+                      }}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400/60 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer border border-red-500/10 z-20"
                     >
                       <Trash2 size={16} />
                     </div>
                   </div>
                   
-                  <h3 className="text-2xl font-black text-white mb-3 group-hover:text-light-accent transition-colors leading-tight">
+                  <h3 className="text-2xl font-black text-white mb-3 group-hover:text-light-accent transition-colors leading-tight flex items-center justify-between">
                     {portfolio.name}
+                    <ArrowRight size={20} className="opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all text-light-accent" />
                   </h3>
                   
                   {portfolio.description && (
@@ -319,14 +329,20 @@ const Portfolio = () => {
                 
                 <div className="px-8 pb-8 space-y-3 relative z-10">
                   <button 
-                    onClick={() => handleOpenAddModal(portfolio)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenAddModal(portfolio);
+                    }}
                     className="w-full glass-button p-4 rounded-2xl text-xs font-black uppercase tracking-widest hover:glass-button-active active:scale-95 flex items-center justify-center group/btn"
                   >
                     <Plus size={18} className="mr-2 group-hover/btn:rotate-90 transition-transform" />
                     Expand Assets
                   </button>
                   <button 
-                    onClick={() => handleBulkAddToCollection(portfolio)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleBulkAddToCollection(portfolio);
+                    }}
                     disabled={addingToCollection[portfolio.id]}
                     className="w-full bg-white/5 hover:bg-white/10 p-4 rounded-2xl text-xs font-black text-gray-400 uppercase tracking-widest transition-all border border-white/10 flex items-center justify-center hover:text-white"
                   >

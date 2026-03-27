@@ -86,49 +86,59 @@ const MyPortfolioMsg = () => {
             <div className="bg-emerald-400/20 p-2 rounded-xl mr-4">
               <Layers className="text-emerald-400" size={24} />
             </div>
-            Sector wise portfolios
+            Built in Sector Wise portfolios
           </h1>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {inBuiltPortfolios.map((portfolio, idx) => (
-          <div key={idx} className="glass-panel p-6 hover:border-white/20 transition-all flex flex-col max-h-[600px] hover:shadow-[0_0_40px_rgba(52,211,153,0.05)]">
+          <div 
+            key={idx} 
+            onClick={() => navigate(`/customer-welcome/portfolio-detail/${encodeURIComponent(portfolio.name)}`)}
+            className="glass-panel p-6 hover:border-emerald-500/30 transition-all flex flex-col max-h-[600px] hover:shadow-[0_0_40px_rgba(52,211,153,0.1)] cursor-pointer group/card"
+          >
             <div className="flex flex-col mb-6 shrink-0">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-white flex items-center">
-                  <div className="bg-emerald-400/10 p-2 rounded-lg mr-3">
+                <div className="text-xl font-bold text-white flex items-center group-hover/card:text-emerald-400 transition-colors">
+                  <div className="bg-emerald-400/10 p-2 rounded-lg mr-3 group-hover/card:bg-emerald-400/20 transition-colors">
                     <Briefcase className="text-emerald-400" size={20} />
                   </div>
                   {portfolio.name}
-                </h3>
+                </div>
               </div>
               
               <div className="flex gap-3">
                 <button
-                  onClick={() => navigate('/customer-welcome/forecast', { 
-                    state: { 
-                      portfolio: { 
-                        name: portfolio.name, 
-                        items: portfolio.items.map(s => ({ stock: s, quantity: 1 })) 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate('/customer-welcome/forecast', { 
+                      state: { 
+                        portfolio: { 
+                          name: portfolio.name, 
+                          items: portfolio.items.map(s => ({ stock: s, quantity: 1 })) 
+                        } 
                       } 
-                    } 
-                  })}
-                  className="flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-xl bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 hover:from-blue-500/30 hover:to-cyan-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-95 shadow-lg"
+                    });
+                  }}
+                  className="flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-xl bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 hover:from-blue-500/30 hover:to-cyan-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-95 shadow-lg z-10"
                 >
                   <LineChart size={14} />
                   <span>Forecast</span>
                 </button>
                 <button
-                  onClick={() => navigate('/customer-welcome/sentiment', { 
-                    state: { 
-                      portfolio: { 
-                        name: portfolio.name, 
-                        items: portfolio.items.map(s => ({ stock: s, quantity: 1 })) 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate('/customer-welcome/sentiment', { 
+                      state: { 
+                        portfolio: { 
+                          name: portfolio.name, 
+                          items: portfolio.items.map(s => ({ stock: s, quantity: 1 })) 
+                        } 
                       } 
-                    } 
-                  })}
-                  className="flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 hover:from-purple-500/30 hover:to-pink-500/30 text-purple-400 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-95 shadow-lg"
+                    });
+                  }}
+                  className="flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 hover:from-purple-500/30 hover:to-pink-500/30 text-purple-400 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-95 shadow-lg z-10"
                 >
                   <BarChart3 size={14} />
                   <span>Sentiment</span>
@@ -142,12 +152,15 @@ const MyPortfolioMsg = () => {
                 const isSelected = selectedStock?.id === stock.id;
 
                 return (
-                  <div key={stock.id} className="relative">
+                  <div key={stock.id} className={`relative ${isSelected ? 'z-[100]' : 'z-20'}`}>
                     <button
-                      onClick={() => setSelectedStock(isSelected ? null : stock)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedStock(isSelected ? null : stock);
+                      }}
                       className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 border ${
                         isSelected 
-                          ? 'bg-gradient-to-r from-indigo-500/30 to-purple-500/30 border-white/30 scale-[1.02] shadow-xl z-20'
+                          ? 'bg-gradient-to-r from-indigo-500/30 to-purple-500/30 border-white/30 scale-[1.02] shadow-xl'
                           : isHighGrowing 
                             ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20' 
                             : 'bg-red-500/5 border-red-500/10 text-red-400 hover:bg-red-500/10'
@@ -197,10 +210,10 @@ const MyPortfolioMsg = () => {
                     {isSelected && (
                       <div 
                         ref={dropdownRef}
-                        className="absolute z-50 left-0 right-0 mt-3 p-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-top-4 duration-300 border border-white/20 rounded-2xl bg-gradient-to-br from-[#1e1b4b] via-[#312e81] to-[#1e1b4b] backdrop-blur-2xl overflow-hidden"
+                        className="absolute z-[100] left-0 right-0 mt-3 p-5 shadow-[0_20px_50px_rgba(0,0,0,0.8)] animate-in fade-in slide-in-from-top-4 duration-300 border-2 border-emerald-500/50 rounded-2xl bg-[#1e1b4b] overflow-hidden"
                       >
-                        {/* Decorative background glow */}
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-[50px] rounded-full -mr-10 -mt-10"></div>
+                        {/* Decorative background glow - reduced opacity to keep it opaque */}
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 blur-[50px] rounded-full -mr-10 -mt-10 pointer-events-none"></div>
                         
                         <div className="flex items-center space-x-3 mb-4 px-1 relative z-10">
                           <div className="bg-emerald-400/20 p-2 rounded-xl">
@@ -217,7 +230,10 @@ const MyPortfolioMsg = () => {
                             userPortfolios.map(up => (
                               <button
                                 key={up.id}
-                                onClick={() => handleAddToUserPortfolio(up.id, stock.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAddToUserPortfolio(up.id, stock.id);
+                                }}
                                 className="w-full text-left px-4 py-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-emerald-500/30 rounded-xl text-sm font-bold text-white flex items-center justify-between transition-all duration-300 group hover:scale-[1.02] hover:shadow-lg"
                               >
                                 <div className="flex items-center">

@@ -57,6 +57,9 @@ except Exception as e:
 from django.contrib.auth import get_user_model
 User = get_user_model()
 
+# In-memory chatbot state (simulated for development, ideally use Cache or DB)
+CHATBOT_STATE = {}
+
 # Utility to get currency symbol based on currency code or stock symbol
 def get_currency_symbol(currency_code='INR', symbol=None):
     if symbol:
@@ -104,17 +107,131 @@ class ChatbotView(APIView):
         
         user_name = "Guest"
         user_role = "customer"
+        user_obj = None
         
         if is_authenticated:
             try:
                 from accounts.models import User
-                user = User.objects.get(id=user_id)
-                user_name = user.full_name or user.username
-                user_role = user.role
+                user_obj = User.objects.get(id=user_id)
+                user_name = user_obj.full_name or user_obj.username
+                user_role = user_obj.role
             except:
                 pass
 
         user_msg_lower = user_message.lower()
+
+        # 0. HANDLE STATE-BASED "BUY STOCK" FLOW
+        if is_authenticated and user_id in CHATBOT_STATE:
+            state = CHATBOT_STATE[user_id]
+            
+            if user_msg_lower in ['cancel', 'stop', 'quit', 'no']:
+                del CHATBOT_STATE[user_id]
+                return Response({'response': "Transaction cancelled. How else can I assist you?"})
+
+            # STEP 1: Waiting for Quantity
+            if state['step'] == 'quantity':
+                import re
+                qty_match = re.search(r'\d+', user_message)
+                if qty_match:
+                    quantity = int(qty_match.group())
+                    if quantity <= 0:
+                        return Response({'response': "Please enter a valid quantity greater than zero."})
+                    
+                    symbol = state['symbol']
+                    stock = Stock.objects.filter(symbol=symbol).first()
+                    price = float(stock.current_price or 0)
+                    total = price * quantity
+                    currency = get_currency_symbol(symbol=symbol)
+                    
+                    CHATBOT_STATE[user_id] = {
+                        'step': 'confirm',
+                        'symbol': symbol,
+                        'name': stock.name,
+                        'quantity': quantity,
+                        'price': price,
+                        'total': total,
+                        'currency': currency,
+                        'stock_id': stock.id
+                    }
+                    
+                    summary = f"SUMMARY:\n- Stock: {stock.name} ({symbol})\n- Price: {currency}{price}\n- Quantity: {quantity}\n- Total Amount: {currency}{total:,.2f}\n\nType 'confirm' to proceed with the purchase."
+                    return Response({'response': summary})
+                else:
+                    return Response({'response': "Please provide a valid quantity for the purchase."})
+
+            # STEP 2: Waiting for Confirmation
+            elif state['step'] == 'confirm':
+                if 'confirm' in user_msg_lower or 'yes' in user_msg_lower:
+                    CHATBOT_STATE[user_id]['step'] = 'mpin'
+                    return Response({'response': "To verify this transaction, please enter your 6-digit M-PIN."})
+                else:
+                    return Response({'response': "Please type 'confirm' to proceed or 'cancel' to stop."})
+
+            # STEP 3: Waiting for M-PIN
+            elif state['step'] == 'mpin':
+                # Check for 6 digit M-PIN
+                import re
+                mpin_match = re.search(r'^\d{6}$', user_message.strip())
+                if mpin_match:
+                    provided_mpin = mpin_match.group()
+                    if user_obj and user_obj.mpin == provided_mpin:
+                        # SUCCESS! EXECUTE PURCHASE
+                        try:
+                            # 1. Create Purchase record
+                            Purchase.objects.create(
+                                user=user_obj,
+                                stock_id=state['stock_id'],
+                                quantity=state['quantity'],
+                                purchase_price=state['price'],
+                                total_amount=state['total'],
+                                portfolio_name="Chatbot Purchase"
+                            )
+                            
+                            # 2. Add to Collection if not exists
+                            Collection.objects.get_or_create(
+                                user=user_obj,
+                                stock_id=state['stock_id'],
+                                defaults={'portfolio_name': 'Chatbot Purchase'}
+                            )
+                            
+                            del CHATBOT_STATE[user_id]
+                            return Response({
+                                'response': f"SUCCESS! Certainly, I've processed your purchase of {state['quantity']} shares of {state['name']}. It has been added to your holdings.",
+                                'show_purchases_link': True
+                            })
+                        except Exception as e:
+                            del CHATBOT_STATE[user_id]
+                            return Response({'response': f"I encountered an error during the transaction: {str(e)}. Please try again later."})
+                    else:
+                        return Response({'response': "The M-PIN you entered is incorrect. Please try again or type 'cancel'."})
+                else:
+                    return Response({'response': "Please enter a valid 6-digit M-PIN."})
+
+        # --- DETECT "BUY" INTENT ---
+        if is_authenticated and ("buy" in user_msg_lower or "purchase" in user_msg_lower):
+             import re
+             # Matches words that look like stock symbols (uppercase, 2-10 chars, optional .NS/.BO)
+             symbol_matches = re.findall(r'\b[A-Z]{2,10}(?:\.[A-Z]{2,3})?\b', user_message)
+             
+             target_stock = None
+             if symbol_matches:
+                 target_stock = Stock.objects.filter(symbol__iexact=symbol_matches[0]).first()
+             
+             if not target_stock:
+                 # Try a fuzzy search for common stock names mentioned in the message
+                 potential_names = user_message.split()
+                 for word in potential_names:
+                     if len(word) > 3:
+                         target_stock = Stock.objects.filter(name__icontains=word).first()
+                         if target_stock: break
+             
+             if target_stock:
+                 CHATBOT_STATE[user_id] = {
+                     'step': 'quantity',
+                     'symbol': target_stock.symbol,
+                     'name': target_stock.name
+                 }
+                 return Response({'response': f"Certainly! I'd be happy to help you buy {target_stock.name} ({target_stock.symbol}). How many shares would you like to purchase?"})
 
         # 1. Check for specific system-related intents (Portfolios, Collections, etc.)
         # This keeps the interactive "Action Tags" working correctly.
@@ -175,8 +292,38 @@ class ChatbotView(APIView):
                     'show_collections_link': True
                 })
 
+        # --- STOCK PRICE EXTRACTION & FETCHING ---
+        stock_data_context = None
+        if "price" in user_msg_lower or "quote" in user_msg_lower:
+            # Try to find a stock symbol in the message (e.g., AAPL or RELIANCE.NS)
+            import re
+            # Matches words that look like stock symbols (uppercase, 2-10 chars, optional .NS/.BO)
+            symbol_matches = re.findall(r'\b[A-Z]{2,10}(?:\.[A-Z]{2,3})?\b', user_message)
+            
+            # If no uppercase symbol, try looking for the name in our DB
+            target_stock = None
+            if symbol_matches:
+                target_stock = Stock.objects.filter(symbol__iexact=symbol_matches[0]).first()
+            
+            if not target_stock:
+                # Try a fuzzy search for common stock names mentioned in the message
+                potential_names = user_message.split()
+                for word in potential_names:
+                    if len(word) > 3:
+                        target_stock = Stock.objects.filter(name__icontains=word).first()
+                        if target_stock: break
+            
+            if target_stock:
+                stock_data_context = {
+                    'symbol': target_stock.symbol,
+                    'name': target_stock.name,
+                    'price': target_stock.current_price,
+                    'sector': target_stock.sector,
+                    'currency': get_currency_symbol(symbol=target_stock.symbol)
+                }
+
         # 2. For everything else, use the Powerful Groq AI!
-        ai_response = generate_ai_response(user_message, is_authenticated, user_name, user_role)
+        ai_response = generate_ai_response(user_message, is_authenticated, user_name, user_role, stock_data=stock_data_context)
         
         # Check for some common AI suggested actions
         action_payload = {'response': ai_response}

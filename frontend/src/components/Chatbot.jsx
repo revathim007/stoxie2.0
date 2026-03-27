@@ -139,8 +139,9 @@ const Chatbot = () => {
     if (!inputValue.trim()) return;
 
     const userMessage = inputValue;
-    const newMessages = [...messages, { text: userMessage, sender: 'user' }];
-    setMessages(newMessages);
+    // Stop any ongoing bot typing effects when user starts a new interaction
+    const newMessages = messages.map(msg => ({ ...msg, isNew: false }));
+    setMessages([...newMessages, { text: userMessage, sender: 'user' }]);
     setInputValue('');
 
     try {
@@ -277,7 +278,13 @@ const Chatbot = () => {
             <input
               type="text"
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              onChange={(e) => {
+                setInputValue(e.target.value);
+                // If user starts typing, stop existing bot animations
+                if (e.target.value.length > 0) {
+                  setMessages(prev => prev.map(m => ({ ...m, isNew: false })));
+                }
+              }}
               placeholder={isListening ? "Listening..." : "Ask Stoxie anything..."}
               className="flex-1 px-4 py-2.5 text-xs rounded-xl focus:ring-2 focus:ring-purple-500/50 bg-white border border-purple-200 placeholder:text-purple-300 text-purple-900 outline-none"
             />
